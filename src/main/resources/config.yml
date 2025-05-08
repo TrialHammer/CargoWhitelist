@@ -1,0 +1,6 @@
+enabled: true
+update-period: 3600
+verified-players: ""
+revoked-players: ""
+kicked-message: ""
+whitelist: [ ]

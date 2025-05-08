@@ -1,0 +1,8 @@
+name: CargoWhitelist
+version: '1.0-SNAPSHOT'
+main: ink.ziip.cargowhitelist.CargoWhitelist
+api-version: '1.21'
+load: STARTUP
+libraries:
+  - com.squareup.okhttp3:okhttp:4.12.0
+  - com.alibaba:fastjson:2.0.57
