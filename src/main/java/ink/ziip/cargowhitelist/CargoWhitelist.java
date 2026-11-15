@@ -15,6 +15,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class CargoWhitelist extends JavaPlugin {
     private static final Set<String> whitelist = ConcurrentHashMap.newKeySet();
+    // 额外手动白名单：始终生效，不受同步影响（永不被同步移除）
+    private static final Set<String> manualWhitelist = ConcurrentHashMap.newKeySet();
 
     private static WhitelistUpdateTask whitelistUpdateTask;
     private static CargoWhitelist instance;
@@ -59,6 +61,7 @@ public final class CargoWhitelist extends JavaPlugin {
         loadWikiConfig();
 
         whitelist.addAll(configWhitelist);
+        manualWhitelist.addAll(config.getStringList("manual-whitelist"));
 
         whitelistUpdateTask = WhitelistUpdateTask.getInstance();
         whitelistUpdateTask.start();
@@ -145,7 +148,11 @@ public final class CargoWhitelist extends JavaPlugin {
     }
 
     public boolean isWhitelisted(String name) {
-        return whitelist.contains(name);
+        return whitelist.contains(name) || manualWhitelist.contains(name);
+    }
+
+    public static Set<String> getManualWhitelist() {
+        return manualWhitelist;
     }
 
     /** 当前内存白名单快照。 */
