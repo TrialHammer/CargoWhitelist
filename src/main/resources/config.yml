@@ -1,6 +1,105 @@
+# ============================================================
+#  CargoWhitelist 配置文件
+# ============================================================
+
+# 是否启用登录白名单拦截
 enabled: true
+
+# 白名单更新周期（秒）。
+# 当前文档是“智能表（smartsheet）”，通过 smartbook 接口读取，无导出次数限制，可设为 1 小时。
+# （仅当回退到“导出”方式时受每用户每天 9 次限制。）
 update-period: 3600
+
+# 主从模式：
+#   master = 从腾讯文档拉取白名单，同步到本地与 wiki（同步仅主机执行）
+#   slave  = 保留原有行为：从 wiki（verified-players / revoked-players 接口）抓取
+mode: master
+
+# 登录被拒时显示的消息
+kicked-message: "§c你不在白名单中，请联系管理员申请。"
+
+# ------- 原有 wiki 抓取接口（从机使用；主机保留作为兜底/参考）-------
+# 通过 MediaWiki Cargo 的 Special:CargoExport 导出 ID 数组，返回形如 [{"ID":"xxx"}, ...]。
+# 必须带 limit（默认只返回 100 条）。
 verified-players: ""
 revoked-players: ""
-kicked-message: ""
-whitelist: [ ]
+
+# 本地缓存的白名单（插件自动维护，无需手改）
+whitelist: []
+
+# ============================================================
+#  腾讯文档（仅 master 模式）
+# ============================================================
+tencent:
+  enabled: true
+
+  # 应用（客户端）信息
+  client-id: ""
+  open-id: ""
+
+  # 访问令牌。ACCESS_TOKEN 会过期；若同时配置了 client-secret 与 refresh-token，
+  # 插件会在过期前自动刷新，并把新令牌写回本文件。
+  access-token: ""
+  refresh-token: ""
+  client-secret: ""
+
+  # 文档定位：填 file-id 或 encoded-id 之一即可。
+  #   encoded-id = 文档 URL https://docs.qq.com/sheet/<这一段>
+  file-id: ""
+  encoded-id: ""
+
+  # 读取方式：
+  #   auto       = 依次尝试 普通表格(range) -> 智能表(smartsheet) -> 导出(export)
+  #   range      = 仅普通在线表格（V3 区域接口）
+  #   smartsheet = 仅智能表（smartbook 接口，无导出次数限制；本项目的收集表结果属于此类）
+  #   export     = 仅导出 xlsx（每用户每天 9 次）
+  source: auto
+
+  # 指定工作表 ID；留空且未配置下方 sheets 时，将读取所有子表（range 方式）。
+  sheet-id: ""
+
+  # 表头所在行（从 1 开始）。
+  header-row: 1
+
+  # 新增到 wiki 时填写的“添加人”
+  operator-default: "腾讯文档同步"
+
+  # 逻辑字段 -> 表头文字 的映射（用于自动定位列）。
+  # 本表为“收集表结果”结构：是否发放 + 是否仍然有效 两列共同决定状态。
+  columns:
+    id: ""
+    premium: ""
+    bedrock: ""
+    date: ""
+    note: ""
+    submitter: ""
+    issued: ""
+    valid: ""
+    revoke-reason: ""
+    revoke-time: ""
+
+  # 单状态列时的取值判定（仅在未配置 issued/valid 的普通表格中使用）。
+  status:
+    active-values: ["在册", "白名单", "通过", "是", "Yes", "TRUE", "1"]
+    revoked-values: ["撤销", "已撤销", "移除", "否", "No", "FALSE", "0"]
+
+  # 多子表模式：当一个工作表整体代表“在册”或“撤销”时使用（range 方式）。
+  # sheets:
+  #   - { title: "正式白名单", status: active }
+  #   - { title: "已撤销",   status: revoked }
+  sheets: []
+
+# ============================================================
+#  Wiki Bot 同步（仅 master 模式）
+# ============================================================
+wiki:
+  enabled: true
+  api-url: "https://wiki.hammer.moe/w/api.php"
+  # 建议使用机器人密码（BotPasswords）：用户名形如 "用户名@机器人名"
+  username: ""
+  password: ""
+  page: "项目:玩家列表"
+  summary: "Bot: 同步白名单（来源：腾讯文档）"
+  # 是否将“腾讯文档中标记撤销、但 wiki 仍在册”的玩家改为撤销。
+  # 不会撤销“仅在表格中缺失”的玩家，避免表格不完整时误删。
+  auto-revoke: true
