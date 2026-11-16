@@ -133,6 +133,24 @@ public class MediaWikiClient {
         boolean changed = false;
         String today = LocalDate.now().toString();
 
+        // 0) 自愈：VerifiedPlayer 行不该带有“自动撤销”备注（历史遗留的错配）
+        for (Map.Entry<String, Integer> e : verifiedIdx.entrySet()) {
+            Row r = parseRow(lines[e.getValue()]);
+            if (r == null) continue;
+            String note = r.params.get("备注");
+            if (note != null && note.contains(AUTO_REVOKE_MARK)) {
+                Map<String, String> p = new LinkedHashMap<>(r.params);
+                String stripped = stripAutoRevoke(note);
+                if (stripped.isEmpty()) {
+                    p.remove("备注");
+                } else {
+                    p.put("备注", stripped);
+                }
+                lines[e.getValue()] = render("VerifiedPlayer", p);
+                changed = true;
+            }
+        }
+
         // 1) 撤销：腾讯文档标记撤销、但页面仍是 Verified
         if (autoRevoke) {
             for (Map.Entry<String, String> rv : revoked.entrySet()) {
@@ -146,8 +164,8 @@ public class MediaWikiClient {
                 if (rv.getValue() != null && !rv.getValue().trim().isEmpty()) {
                     addNum += "：" + rv.getValue().trim();
                 }
-                String oldNote = p.get("备注");
-                p.put("备注", (oldNote == null || oldNote.isEmpty()) ? addNum : oldNote + "；" + addNum);
+                String oldNote = stripAutoRevoke(p.get("备注"));
+                p.put("备注", oldNote.isEmpty() ? addNum : oldNote + "；" + addNum);
                 lines[idx] = render("RevokedPlayer", p);
                 changed = true;
             }
@@ -162,10 +180,17 @@ public class MediaWikiClient {
             }
             Integer rIdx = revokedIdx.get(id);
             if (rIdx != null) {
-                // 之前已撤销，现重新在册：把该行改回 Verified
+                // 之前已撤销，现重新在册：改回 Verified，并移除历史“自动撤销”备注
                 Row r = parseRow(lines[rIdx]);
                 if (r != null) {
-                    lines[rIdx] = render("VerifiedPlayer", r.params);
+                    Map<String, String> p = new LinkedHashMap<>(r.params);
+                    String stripped = stripAutoRevoke(p.get("备注"));
+                    if (stripped.isEmpty()) {
+                        p.remove("备注");
+                    } else {
+                        p.put("备注", stripped);
+                    }
+                    lines[rIdx] = render("VerifiedPlayer", p);
                     changed = true;
                 }
                 continue;
@@ -194,6 +219,23 @@ public class MediaWikiClient {
         if (!e.getOperator().isEmpty()) p.put("添加人", e.getOperator());
         if (!e.getNote().isEmpty()) p.put("备注", e.getNote());
         return p;
+    }
+
+    private static final String AUTO_REVOKE_MARK = "自动撤销（腾讯文档同步）";
+
+    /** 从备注中剔除所有“自动撤销（腾讯文档同步）…”片段，恢复为原始人工备注。 */
+    private static String stripAutoRevoke(String note) {
+        if (note == null || note.isEmpty()) return "";
+        String[] parts = note.split("[；;]");
+        StringBuilder sb = new StringBuilder();
+        for (String part : parts) {
+            if (part.contains(AUTO_REVOKE_MARK)) continue;
+            String s = part.trim();
+            if (s.isEmpty()) continue;
+            if (sb.length() > 0) sb.append("；");
+            sb.append(s);
+        }
+        return sb.toString();
     }
 
     private static final class Row {

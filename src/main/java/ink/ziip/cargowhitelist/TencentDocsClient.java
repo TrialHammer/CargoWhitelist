@@ -66,6 +66,12 @@ public class TencentDocsClient {
     // ------------------------------------------------------------------
 
     public List<WhitelistEntry> fetchWhitelist() throws IOException {
+        if (RateLimitGuard.inCooldown()) {
+            long ms = RateLimitGuard.remainingMs();
+            warn("腾讯文档处于限频冷却中，剩余约 " + (ms / 3600000) + " 小时 "
+                    + (ms % 3600000 / 60000) + " 分，本轮跳过");
+            return new ArrayList<>();
+        }
         ensureToken();
         String fileId = resolveFileId();
         String source = cfg.source == null ? "auto" : cfg.source.toLowerCase();
@@ -493,10 +499,19 @@ public class TencentDocsClient {
                     refs.add(new SmartRef(s.getString("sheetID"), s.getString("title")));
                 }
             }
+        } catch (RateLimitException e) {
+            throw e; // 限频需向上传播以终止本轮
         } catch (Exception e) {
             warn("查询智能表失败: " + e.getMessage());
         }
         return refs;
+    }
+
+    /** 腾讯文档限频（不可重试，触发 24h 冷却）。 */
+    public static class RateLimitException extends RuntimeException {
+        public RateLimitException(String message) {
+            super(message);
+        }
     }
 
     private List<Raw> readSmartRecords(String fileId, String sheetId) throws IOException {
@@ -702,13 +717,33 @@ public class TencentDocsClient {
     private JSONObject executeJson(Request req) throws IOException {
         try (Response resp = client.newCall(req).execute()) {
             String body = resp.body() == null ? "" : resp.body().string();
-            if (body.isEmpty()) return new JSONObject();
-            try {
-                return JSON.parseObject(body);
-            } catch (Exception e) {
-                throw new IOException("腾讯文档返回非 JSON: " + body, e);
+            if (resp.code() == 429) {
+                RateLimitGuard.trigger();
+                throw new RateLimitException("HTTP 429");
             }
+            if (body.isEmpty()) return new JSONObject();
+            JSONObject obj;
+            try {
+                obj = JSON.parseObject(body);
+            } catch (Exception e) {
+                throw new IOException("腾讯文档返回非 JSON(" + resp.code() + "): " + body, e);
+            }
+            if (isRateLimit(obj)) {
+                RateLimitGuard.trigger();
+                throw new RateLimitException("Request Is Over Rate");
+            }
+            return obj;
         }
+    }
+
+    private boolean isRateLimit(JSONObject root) {
+        if (root == null) return false;
+        int ret = root.getIntValue("ret");
+        int code = root.getIntValue("code");
+        if (ret == 9998 || ret == 400007 || code == 9998 || code == 400007) return true;
+        String msg = root.getString("msg");
+        if (msg == null) msg = root.getString("message");
+        return msg != null && msg.toLowerCase().contains("over rate");
     }
 
     private boolean isTokenError(JSONObject root) {
