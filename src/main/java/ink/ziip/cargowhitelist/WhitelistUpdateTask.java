@@ -25,6 +25,17 @@ public class WhitelistUpdateTask extends BaseTask {
         return instance;
     }
 
+    /** 重载时丢弃单例，以便用新的 update-period 重建任务。 */
+    public static void reset() {
+        if (instance != null) {
+            try {
+                instance.cancel();
+            } catch (Exception ignored) {
+            }
+            instance = null;
+        }
+    }
+
     @Override
     public void run() {
         if (!started) {

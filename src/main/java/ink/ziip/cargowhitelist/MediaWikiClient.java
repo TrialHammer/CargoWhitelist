@@ -78,6 +78,24 @@ public class MediaWikiClient {
         return true;
     }
 
+    /**
+     * 确保该玩家在页面上是“在册”（用于 /cw add）：
+     * 不存在则追加 {{VerifiedPlayer}}，若原为 {{RevokedPlayer}} 则改回。
+     * 不会影响其它条目。
+     */
+    public boolean addEntry(WhitelistEntry e) throws IOException {
+        login();
+        String wikitext = getWikitext();
+        Map<String, WhitelistEntry> active = new LinkedHashMap<>();
+        active.put(e.getId(), e);
+        DiffResult diff = applyDiff(wikitext, active, new LinkedHashMap<>(), cfg.autoRevoke);
+        if (!diff.changed) {
+            return false;
+        }
+        save(diff.text);
+        return true;
+    }
+
     // ------------------------------------------------------------------
     // 差异计算
     // ------------------------------------------------------------------

@@ -38,11 +38,19 @@ wiki:                   # 仅 master
   auto-revoke: true
 ```
 
+- **数据分离**：`config.yml` 是只读配置，运行时**绝不写回**；同步缓存、强制白名单、刷新后的 Token 都写到独立的 `data.yml`，避免回写覆盖你的配置。
 - **来源读取**：`auto` 依次尝试 `range`(普通表格) → `smartsheet`(智能表) → `export`(导出 xlsx，每天 9 次)。
   “收集表结果”通常是智能表，走 `smartsheet`，无次数限制，可 `update-period: 3600`。
-- **手动白名单**：`manual-whitelist` 列表中的玩家**始终放行**，不受腾讯文档/wiki 同步影响，也不会被同步移除。
 - **限频冷却**：触发 `Request Is Over Rate`（`9998`/`400007`/HTTP 429）后，冷却至**下一个自然日 23:59（北京时间）**；开始时间记在 `tencent-ratelimit.txt`，冷却期内**重复触发不重置**，期间跳过同步（不删数据）。
 - **状态判定**（本表）：`是否发放白名单=是` 且 `白名单是否仍然有效=是` → 在册；发放=是但有效≠是 → 撤销；发放=否 → 忽略。同一 ID 多次提交时，任一在册即视为在册。
+
+## 命令（`/cw`）
+
+- `/cw add <玩家>` — 加入**强制白名单**（本服立即生效、不被同步移除），并**写 wiki 条目**（从机读 wiki，因此所有从机随之放行）。
+- `/cw remove <玩家>` — 从强制白名单移除（不影响同步白名单）。
+- `/cw list` — 查看强制白名单。
+- `/cw reload` — 重载 `config.yml` 与 `data.yml`。
+- 权限：`cargowhitelist.admin`（默认 OP），别名 `/cargowhitelist`。
 
 ## Wiki 同步（增量）
 
