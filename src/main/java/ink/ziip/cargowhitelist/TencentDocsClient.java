@@ -159,7 +159,9 @@ public class TencentDocsClient {
     private WhitelistEntry toEntry(Raw r, boolean active) {
         String note;
         if (active) {
-            note = r.note;
+            // 不把申请人填写的“附加信息”写入 wiki 备注（多为口语化无关内容）；
+            // 备注交由管理员在 wiki 手写。
+            note = "";
         } else {
             StringBuilder sb = new StringBuilder();
             if (!r.reason.isEmpty()) sb.append(r.reason);
