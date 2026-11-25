@@ -1,67 +1,9 @@
 # CargoWhitelist
 
-Spigot 白名单插件，支持主从两种来源：
+CargoWhitelist 把腾讯文档里的白名单同步到 Minecraft 服务器。需要多台服务器共享名单时，由一台主节点写入 MediaWiki，其余节点从 Wiki 读取，避免多台服重复同步。
 
-- **master（主机）**：从腾讯文档读取白名单，同步到本地，并通过 MediaWiki Bot 增量写入 wiki。
-- **slave（从机）**：沿用原逻辑，从 wiki 的 `verified-players` / `revoked-players` 接口抓取。
+## 部署
 
-同一套部署中，只有主机执行同步；从机读 wiki 即可跟随。
+运行 `./build.sh` 构建，在 `target/` 取得 JAR 并放入服务端的 `plugins/`。启动一次生成配置后，按[同步配置指南](docs/configuration.md)设置主节点或从节点。凭据和部署地址只填在部署文件中，不提交到仓库。
 
-## 配置
-
-`src/main/resources/config.yml` 只有占位符；真实值写入**本地** `config.local.yml`（已 gitignore，不提交）。
-部署时把它复制到服务器的 `plugins/CargoWhitelist/config.yml`。jar 内**不含任何密钥**。
-
-关键项：
-
-```yaml
-mode: master            # master | slave
-
-tencent:                # 仅 master
-  client-id: ""
-  open-id: ""
-  access-token: ""      # 会过期；配 refresh-token + client-secret 可自动刷新
-  source: auto          # auto | range | smartsheet | export
-  file-id: ""           # 或 encoded-id
-  encoded-id: ""
-  header-row: 1
-  columns: { id: "", premium: "", bedrock: "", date: "", note: "",
-             issued: "", valid: "", revoke-reason: "", revoke-time: "" }
-  status: { active-values: [], revoked-values: [] }
-
-wiki:                   # 仅 master
-  enabled: true
-  api-url: "https://wiki.example.com/w/api.php"
-  username: "用户名@机器人名"
-  password: ""
-  page: "项目:页面名"
-  auto-revoke: true
-```
-
-- **数据分离**：`config.yml` 是只读配置，运行时**绝不写回**；同步缓存、强制白名单、刷新后的 Token 都写到独立的 `data.yml`，避免回写覆盖你的配置。
-- **来源读取**：`auto` 依次尝试 `range`(普通表格) → `smartsheet`(智能表) → `export`(导出 xlsx，每天 9 次)。
-  “收集表结果”通常是智能表，走 `smartsheet`，无次数限制，可 `update-period: 3600`。
-- **限频冷却**：触发 `Request Is Over Rate`（`9998`/`400007`/HTTP 429）后，冷却至**下一个自然日 23:59（北京时间）**；开始时间记在 `tencent-ratelimit.txt`，冷却期内**重复触发不重置**，期间跳过同步（不删数据）。
-- **状态判定**（本表）：`是否发放白名单=是` 且 `白名单是否仍然有效=是` → 在册；发放=是但有效≠是 → 撤销；发放=否 → 忽略。同一 ID 多次提交时，任一在册即视为在册。
-
-## 命令（`/cw`）
-
-- `/cw add <玩家>` — 加入**强制白名单**（本服立即生效、不被同步移除），并**写 wiki 条目**（从机读 wiki，因此所有从机随之放行）。
-- `/cw remove <玩家>` — 从强制白名单移除（不影响同步白名单）。
-- `/cw list` — 查看强制白名单。
-- `/cw reload` — 重载 `config.yml` 与 `data.yml`。
-- 权限：`cargowhitelist.admin`（默认 OP），别名 `/cargowhitelist`。
-
-## Wiki 同步（增量）
-
-- 在册、wiki 无 → 追加 `{{ VerifiedPlayer }}`；在册、wiki 原为 `RevokedPlayer` → 改回。
-- 撤销、wiki 现为 `VerifiedPlayer` → 改为 `{{ RevokedPlayer }}` 并在备注追加撤销说明（**才叫撤销**）。
-- **撤销只作用于已存在的 wiki 条目**：从没加入过 wiki 的 ID 标了撤销也不产生改动；撤销不删行。
-- 表格中“缺失”不等于撤销，不会误删；无变更时不写入。
-
-## 构建
-
-```bash
-./build.sh          # = mvn clean package；产出的 jar 内 config.yml 为占位，不含密钥
-# 产物：target/CargoWhitelist-*.jar
-```
+管理员用 `/cw add <玩家>` 和 `/cw remove <玩家>` 管理手动放行名单。用 `/cw list` 查看名单，用 `/cw reload` 重载。同步记录不会移除手动放行。
